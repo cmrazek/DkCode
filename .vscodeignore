@@ -1,5 +1,10 @@
 .vscode/**
 .vscode-test/**
+src/**
 .gitignore
 vsc-extension-quickstart.md
 notes.txt
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
