@@ -1,0 +1,49 @@
+{
+    "name": "dkcode",
+    "displayName": "DkCode",
+    "description": "WBDK Language Extension",
+    "version": "1.0.0",
+    "engines": {
+        "vscode": "^1.42.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "dk",
+                "aliases": ["DK", "dk"],
+                "extensions": [
+                    ".cc",".cc+",".cc&",
+                    ".ct",".ct+",".ct&",
+                    ".f",".f+",".f&",
+                    ".gp",".gp+",".gp&",
+                    ".i",".i+",".i&",".id",".ie",".il",
+                    ".nc",".nc+",".nc&",
+                    ".sc",".sc+",".sc&",
+                    ".sp",".sp+",".sp&",
+                    ".st",".st+",".st&"],
+                "configuration": "./dk-language-configuration.json"
+            },
+            {
+                "id": "dkdict",
+                "aliases": ["DKDict", "dkdict"],
+                "extensions": [".t",".t+",".t&"],
+                "configuration": "./dkdict-language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "dk",
+                "scopeName": "source.dk",
+                "path": "./syntaxes/dk.tmLanguage.json"
+            },
+            {
+                "language": "dkdict",
+                "scopeName": "source.dkdict",
+                "path": "./syntaxes/dkdict.tmLanguage.json"
+            }
+        ]
+    }
+}

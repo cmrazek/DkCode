@@ -1,0 +1,92 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "DKDict",
+	"patterns": [
+		{ "include": "#keywords" },
+		{ "include": "#strings" },
+		{ "include": "#numbers" },
+		{ "include": "#dataTypes" },
+		{ "include": "#lineComment" },
+		{ "include": "#blockComment" },
+		{ "include": "#preprocessorInclude" },
+		{ "include": "#preprocessorDefine" },
+		{ "include": "#preprocessorOther" }
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"match": "\\b(tag)\\s+([a-zA-Z0-9_:]+)",
+					"captures": {
+						"1": { "name": "keyword.control.dkdict" },
+						"2": { "name": "entity.name.tag.dkdict" }
+					}
+				},
+				{
+					"name": "keyword.control.dkdict",
+					"match": "\\b(accel|add|alter|alterable|alternate|AppID|before|by|clsid|col|cols|column|command|comment|create|currency|custom|database|default|defaultevent|description|display|drop|endgroup|enumstring|extends|form|formonly|framework|group|iid|image|index|interface|interfacetype|langid|Level|local_currency|longform|major|many|minor|modal|modeless|move|noaudit|nopersist|nopick|NOPICK|noupdates|nowarn|numeric|on|one|order|path|persist|pick|preload|primary|PROBE|progid|prompt|relationship|row|rows|sametype|scroll|Section|set|shortform|snapshot|stringdef|table|tableheader|tag|time|tlbid|to|tool|typedef|unique|unsigned|upd|updates|warn|where|workspace|zoom)\\b"
+				},
+				{
+					"name": "keyword.other.dataAttribute.dkdict",
+					"match": "\\b(ALLCAPS|AUTOCAPS|INPUT|INTENSITY|LEADINGZEROS|NOCHANGE|NODISPLAY|NOECHO|NOINPUT|NOPICK|NOUSE|REQUIRED)\\b"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.dkdict",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.dkdict",
+					"match": "\\\\."
+				}
+			]
+		},
+		"numbers": {
+			"patterns": [{
+				"name": "constant.numeric.dkdict",
+				"match": "\\d+(\\.\\d+)?"
+			}]
+		},
+		"dataTypes": {
+			"patterns": [{
+				"name": "keyword.other.dataType.dkdict",
+				"match": "\\b(char|comobject|int|long|numeric|oleobject|short|string|unsigned|varying)\\b"
+			}]
+		},
+		"lineComment": {
+			"patterns": [{
+				"name": "comment.line.dkdict",
+				"match": "//.*"
+			}]
+		},
+		"blockComment": {
+			"name": "comment.block.dkdict",
+			"begin": "/\\*",
+			"end": "\\*/",
+			"patterns": []
+		},
+		"preprocessorOther": {
+			"patterns": [{
+				"name": "meta.preprocessor.other.dkdict",
+				"match": "#\\w+"
+			}]
+		},
+		"preprocessorInclude": {
+			"match": "(#include)\\s+((<|\\\")[^<>\\\"]+(>|\\\"))",
+			"captures": {
+				"1": { "name": "meta.preprocessor.include.dkdict" },
+				"2": { "name": "meta.preprocessor.string.dkdict" }
+			}
+		},
+		"preprocessorDefine": {
+			"match": "(#(define|undef|ifdef))\\s+(\\w+)",
+			"captures": {
+				"1": { "name": "meta.preprocessor.define.dkdict" },
+				"3": { "name": "entity.name.tag.dkdict" }
+			}
+		}
+	},
+	"scopeName": "source.dkdict"
+}
