@@ -9,18 +9,18 @@ export function activate(context: vscode.ExtensionContext)
 {
 	context.subscriptions.push(vscode.commands.registerTextEditorCommand('dkcode.addFileHeader', editing.addFileHeader));
 
-	let disposable = vscode.languages.registerHoverProvider('dk', {
-		provideHover(document, position, token) {
+	// let disposable = vscode.languages.registerHoverProvider('dk', {
+	// 	provideHover(document, position, token) {
 
-			console.log("hover at line " + position.line + ", character ", position.character);
-			let wordRange = document.getWordRangeAtPosition(position);
-			let word = document.getText(wordRange);
-			console.log("word: " + word);
+	// 		console.log("hover at line " + position.line + ", character ", position.character);
+	// 		let wordRange = document.getWordRangeAtPosition(position);
+	// 		let word = document.getText(wordRange);
+	// 		console.log("word: " + word);
 
-			return new vscode.Hover(word);
-		}
-	});
-	context.subscriptions.push(disposable);
+	// 		return new vscode.Hover(word);
+	// 	}
+	// });
+	// context.subscriptions.push(disposable);
 }
 
 // this method is called when your extension is deactivated
