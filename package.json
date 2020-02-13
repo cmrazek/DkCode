@@ -17,49 +17,20 @@
     "activationEvents": [
         "onLanguage:dk",
         "onLanguage:dkdict",
-        "onCommand:dkcode.addFileHeader"
+        "onCommand:dkcode.addFileHeader",
+        "onCommand:dkcode.insertDate"
     ],
     "main": "./out/extension.js",
     "contributes": {
         "languages": [
             {
                 "id": "dk",
-                "aliases": [
-                    "DK",
-                    "dk"
-                ],
+                "aliases": ["DK","dk"],
                 "extensions": [
-                    ".cc",
-                    ".cc+",
-                    ".cc&",
-                    ".ct",
-                    ".ct+",
-                    ".ct&",
-                    ".f",
-                    ".f+",
-                    ".f&",
-                    ".gp",
-                    ".gp+",
-                    ".gp&",
-                    ".i",
-                    ".i+",
-                    ".i&",
-                    ".id",
-                    ".ie",
-                    ".il",
-                    ".nc",
-                    ".nc+",
-                    ".nc&",
-                    ".sc",
-                    ".sc+",
-                    ".sc&",
-                    ".sp",
-                    ".sp+",
-                    ".sp&",
-                    ".st",
-                    ".st+",
-                    ".st&"
-                ],
+                    ".cc",".cc+",".cc&",".ct",".ct+",".ct&",
+                    ".f",".f+",".f&",".gp",".gp+",".gp&",
+                    ".i",".i+",".i&",".id",".ie",".il",".nc",".nc+",".nc&",
+                    ".sc",".sc+",".sc&",".sp",".sp+",".sp&",".st",".st+",".st&"],
                 "configuration": "./dk-language-configuration.json"
             },
             {
@@ -93,12 +64,22 @@
                 "command": "dkcode.addFileHeader",
                 "title": "Add DK File Header",
                 "category": "editing"
+            },
+            {
+                "command": "dkcode.insertDate",
+                "title": "Insert DK Date",
+                "category": "editing"
             }
         ],
         "keybindings": [
             {
                 "command": "dkcode.addFileHeader",
                 "key": "alt+o alt+h",
+                "when": "editorFocus && !editorReadOnly"
+            },
+            {
+                "command": "dkcode.insertDate",
+                "key": "alt+o alt+y",
                 "when": "editorFocus && !editorReadOnly"
             }
         ],

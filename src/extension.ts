@@ -8,6 +8,7 @@ import * as editing from './editing';
 export function activate(context: vscode.ExtensionContext)
 {
 	context.subscriptions.push(vscode.commands.registerTextEditorCommand('dkcode.addFileHeader', editing.addFileHeader));
+	context.subscriptions.push(vscode.commands.registerTextEditorCommand('dkcode.insertDate', editing.insertDate));
 
 	// let disposable = vscode.languages.registerHoverProvider('dk', {
 	// 	provideHover(document, position, token) {

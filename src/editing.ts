@@ -57,3 +57,14 @@ export function addFileHeader(textEditor: vscode.TextEditor, edit: vscode.TextEd
         textEditor.revealRange(new vscode.Range(new vscode.Position(0,0), new vscode.Position(0,0)), vscode.TextEditorRevealType.AtTop);
     })
 }
+
+export function insertDate(textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit)
+{
+    textEditor.edit(e =>
+    {
+        e.replace(textEditor.selection, formatProbeDate(new Date()));
+    }).then(() =>
+    {
+        textEditor.selection = new vscode.Selection(textEditor.selection.end, textEditor.selection.end);
+    })
+}
