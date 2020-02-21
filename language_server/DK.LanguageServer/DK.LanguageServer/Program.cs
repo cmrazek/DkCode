@@ -7,19 +7,11 @@ namespace DK.LanguageServer
 {
 	class Program
 	{
-		//private static string _pipeName;
-
 		static void Main(string[] args)
 		{
 			try
 			{
-				//if (args.Length != 1) throw new ArgumentException("Expected 1 argument: name of named pipe");
-				//_pipeName = args[0];
-				//if (string.IsNullOrWhiteSpace(_pipeName)) throw new ArgumentException("Invalid pipe name");
-
-#pragma warning disable VSTHRD002 // Avoid problematic synchronous waits
-				Environment.ExitCode = new Program().RunAsync().GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002 // Avoid problematic synchronous waits
+				Environment.ExitCode = new Program().Run();
 
 				Log.Info("Shutting down normally.");
 			}
@@ -34,21 +26,10 @@ namespace DK.LanguageServer
 			}
 		}
 
-		private async Task<int> RunAsync()
+		private int Run()
 		{
 			Log.Info("Language server starting...");
-			//Log.Info("Pipe Name: '{0}'", _pipeName);
 
-			
-			// TODO: remove
-			//using (var stream = new System.IO.Pipes.NamedPipeServerStream(_pipeName, PipeDirection.InOut,
-			//		NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte,
-			//		PipeOptions.Asynchronous))
-			//{
-			//	Log.Debug("Waiting for connection...");
-			//	await stream.WaitForConnectionAsync();
-
-			Log.Debug("Got connection; starting LanguageServer()");
 			var server = new LanguageServer(Console.OpenStandardOutput(), Console.OpenStandardInput());
 			bool running = true;
 			server.Disconnected += (sender, e) =>
@@ -59,7 +40,7 @@ namespace DK.LanguageServer
 
 			while (running)
 			{
-				await Task.Delay(1000);
+				System.Threading.Thread.Sleep(1000);
 			}
 
 			Log.Info("Language server shutting down");

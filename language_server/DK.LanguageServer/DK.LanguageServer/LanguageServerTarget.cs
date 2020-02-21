@@ -7,7 +7,7 @@ using StreamJsonRpc;
 
 namespace DK.LanguageServer
 {
-	public class LanguageServerTarget
+	class LanguageServerTarget
 	{
 		private LanguageServer _server;
 
@@ -28,7 +28,7 @@ namespace DK.LanguageServer
 					TextDocumentSync = new TextDocumentSyncOptions
 					{
 						OpenClose = true,
-						Change = TextDocumentSyncKind.Full
+						Change = TextDocumentSyncKind.Incremental
 					}
 				}
 			};
@@ -51,7 +51,7 @@ namespace DK.LanguageServer
 		public void OnTextDocumentOpened(JToken arg)
 		{
 			var e = arg.ToObject<DidOpenTextDocumentParams>();
-			Log.Debug("Text document opened: {0}", e.TextDocument.Uri.AbsoluteUri);
+			Log.Debug("Text document opened: {0} Version {1}", e.TextDocument.Uri.AbsoluteUri, e.TextDocument.Version);
 			_server.OnTextDocumentOpened(e.TextDocument);
 		}
 
@@ -67,7 +67,17 @@ namespace DK.LanguageServer
 		public void OnTextDocumentChanged(JToken arg)
 		{
 			var e = arg.ToObject<DidChangeTextDocumentParams>();
-			Log.Debug("Text document changed: {0}", e.TextDocument.Uri.AbsoluteUri);
+
+			Log.Debug("Text document changed: {0} Version {1}", e.TextDocument.Uri.AbsoluteUri, e.TextDocument.Version);
+			foreach (var change in e.ContentChanges)
+			{
+				Log.Debug("Range [Ln{0}Ch{1}-Ln{2}Ch{3}] RangeLength [{4}] Text[{5}]",
+					change.Range.Start.Line, change.Range.Start.Character,
+					change.Range.End.Line, change.Range.End.Character,
+					change.RangeLength,
+					change.Text);
+			}
+
 			_server.OnTextDocumentChanged(e.TextDocument, e.ContentChanges);
 		}
 	}

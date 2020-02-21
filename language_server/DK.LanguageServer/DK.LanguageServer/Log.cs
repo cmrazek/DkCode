@@ -34,7 +34,6 @@ namespace DK.LanguageServer
 			if (CheckFile())
 			{
 				_file.WriteLine(line);
-				_file.Flush();	// TODO
 			}
 		}
 
