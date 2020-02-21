@@ -25,12 +25,42 @@
         "languages": [
             {
                 "id": "dk",
-                "aliases": ["DK","dk"],
+                "aliases": [
+                    "DK",
+                    "dk"
+                ],
                 "extensions": [
-                    ".cc",".cc+",".cc&",".ct",".ct+",".ct&",
-                    ".f",".f+",".f&",".gp",".gp+",".gp&",
-                    ".i",".i+",".i&",".id",".ie",".il",".nc",".nc+",".nc&",
-                    ".sc",".sc+",".sc&",".sp",".sp+",".sp&",".st",".st+",".st&"],
+                    ".cc",
+                    ".cc+",
+                    ".cc&",
+                    ".ct",
+                    ".ct+",
+                    ".ct&",
+                    ".f",
+                    ".f+",
+                    ".f&",
+                    ".gp",
+                    ".gp+",
+                    ".gp&",
+                    ".i",
+                    ".i+",
+                    ".i&",
+                    ".id",
+                    ".ie",
+                    ".il",
+                    ".nc",
+                    ".nc+",
+                    ".nc&",
+                    ".sc",
+                    ".sc+",
+                    ".sc&",
+                    ".sp",
+                    ".sp+",
+                    ".sp&",
+                    ".st",
+                    ".st+",
+                    ".st&"
+                ],
                 "configuration": "./dk-language-configuration.json"
             },
             {
@@ -119,5 +149,10 @@
         "mocha": "^7.0.1",
         "typescript": "^3.7.5",
         "vscode-test": "^1.3.0"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^6.1.0",
+        "vscode-languageserver": "^6.1.0",
+        "vscode-languageserver-textdocument": "^1.0.0"
     }
 }

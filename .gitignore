@@ -2,3 +2,8 @@ out
 node_modules
 package-lock.json
 *.vsix
+
+.vs/
+/language_server/bin/
+/language_server/DK.LanguageServer/DK.LanguageServer/bin/
+/language_server/DK.LanguageServer/DK.LanguageServer/obj/

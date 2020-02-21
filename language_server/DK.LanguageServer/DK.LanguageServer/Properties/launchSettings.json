@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DK.LanguageServer": {
+      "commandName": "Project",
+      "commandLineArgs": "vscode_dkcode_debug"
+    }
+  }
+}

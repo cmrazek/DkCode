@@ -23,7 +23,7 @@ function getProbeMonthName(month: number) : string
 
 function formatProbeDate(dt: Date) : string
 {
-    if (dt == null) return "";
+    if (dt === null) { return ""; }
     return dt.getDate().toString().padStart(2, '0') + getProbeMonthName(dt.getMonth()) + dt.getFullYear().toString().padStart(4, '0');
 }
 
@@ -33,7 +33,7 @@ export function addFileHeader(textEditor: vscode.TextEditor, edit: vscode.TextEd
 
     let initials = <string>vscode.workspace.getConfiguration().get("dkcode.userInitials");
     let workItemId = <string>vscode.workspace.getConfiguration().get("dkcode.workItemId");
-    let eol = textEditor.document.eol == vscode.EndOfLine.LF ? "\n" : "\r\n";
+    let eol = textEditor.document.eol === vscode.EndOfLine.LF ? "\n" : "\r\n";
 
     let hdr = "/***************************************************************************************************" + eol;
     hdr += " * File Name: " + path.basename(textEditor.document.fileName) + eol;
@@ -55,7 +55,7 @@ export function addFileHeader(textEditor: vscode.TextEditor, edit: vscode.TextEd
         let cursorPos = new vscode.Position(7, commentLine.length);
         textEditor.selection = new vscode.Selection(cursorPos, cursorPos);
         textEditor.revealRange(new vscode.Range(new vscode.Position(0,0), new vscode.Position(0,0)), vscode.TextEditorRevealType.AtTop);
-    })
+    });
 }
 
 export function insertDate(textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit)
@@ -66,5 +66,5 @@ export function insertDate(textEditor: vscode.TextEditor, edit: vscode.TextEdito
     }).then(() =>
     {
         textEditor.selection = new vscode.Selection(textEditor.selection.end, textEditor.selection.end);
-    })
+    });
 }
