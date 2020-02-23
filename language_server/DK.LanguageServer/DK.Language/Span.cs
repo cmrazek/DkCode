@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using LSP = Microsoft.VisualStudio.LanguageServer.Protocol;
 
-namespace DK.LanguageServer
+namespace DK.Language
 {
-	class Span
+	public class Span
 	{
 		private int _start;
 		private int _length;
+
+		public static readonly Span Empty = new Span(0, 0);
 
 		public Span(int start, int length)
 		{
@@ -47,5 +48,9 @@ namespace DK.LanguageServer
 				_length = value - _start;
 			}
 		}
+
+		public bool IsEmpty => _length == 0;
+
+		public override string ToString() => $"[{_start}-{_start + _length}]";
 	}
 }

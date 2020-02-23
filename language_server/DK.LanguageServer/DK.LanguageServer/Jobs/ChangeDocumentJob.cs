@@ -7,11 +7,11 @@ namespace DK.LanguageServer.Jobs
 {
 	class ChangeDocumentJob : BaseJob
 	{
-		private Document _doc;
+		private DkDocument _doc;
 		private IEnumerable<LSP.TextDocumentContentChangeEvent> _changes;
 		private int? _version;
 
-		public ChangeDocumentJob(Document doc, IEnumerable<LSP.TextDocumentContentChangeEvent> changes, int? version)
+		public ChangeDocumentJob(DkDocument doc, IEnumerable<LSP.TextDocumentContentChangeEvent> changes, int? version)
 		{
 			_doc = doc ?? throw new ArgumentNullException(nameof(doc));
 			_changes = changes ?? throw new ArgumentNullException(nameof(changes));

@@ -16,7 +16,7 @@ namespace DK.LanguageServer
 		private LanguageServerTarget _target;
 		private JsonRpc _rpc;
 		private ManualResetEvent _exitEvent = new ManualResetEvent(false);
-		private Dictionary<Uri, Document> _docs = new Dictionary<Uri, Document>();
+		private Dictionary<Uri, DkDocument> _docs = new Dictionary<Uri, DkDocument>();
 		private WorkThread _workThread;
 		private JoinableTaskContext _jtContext;
 		private JoinableTaskFactory _jtFactory;
@@ -55,7 +55,7 @@ namespace DK.LanguageServer
 
 		public void OnTextDocumentOpened(LSP.TextDocumentItem lspDoc)
 		{
-			var doc = new Document(lspDoc.Uri, lspDoc.Text, lspDoc.Version);
+			var doc = new DkDocument(lspDoc.Uri, lspDoc.Text, lspDoc.Version);
 			_docs[doc.Uri] = doc;
 
 			var job = new Jobs.ValidateDocumentJob(doc, this);

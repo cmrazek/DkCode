@@ -5,5 +5,11 @@ package-lock.json
 
 .vs/
 /language_server/bin/
+/language_server/DK.LanguageServer/DK.Common/bin/
+/language_server/DK.LanguageServer/DK.Common/obj/
+/language_server/DK.LanguageServer/DK.Language/bin/
+/language_server/DK.LanguageServer/DK.Language/obj/
 /language_server/DK.LanguageServer/DK.LanguageServer/bin/
 /language_server/DK.LanguageServer/DK.LanguageServer/obj/
+/language_server/DK.LanguageServer/DK.Test/bin/
+/language_server/DK.LanguageServer/DK.Test/obj/

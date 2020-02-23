@@ -6,10 +6,10 @@ namespace DK.LanguageServer.Jobs
 {
 	class ValidateDocumentJob : BaseJob
 	{
-		private Document _doc;
+		private DkDocument _doc;
 		private LanguageServer _server;
 
-		public ValidateDocumentJob(Document document, LanguageServer server)
+		public ValidateDocumentJob(DkDocument document, LanguageServer server)
 		{
 			_doc = document ?? throw new ArgumentNullException(nameof(document));
 			_server = server ?? throw new ArgumentNullException(nameof(server));

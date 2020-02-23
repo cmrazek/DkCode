@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DK.Test": {
+      "commandName": "Project",
+      "commandLineArgs": "preprocess \"D:\\CCSSRC1\\prod\\DICT\" \"c:\\temp\\dict.txt\""
+    }
+  }
+}

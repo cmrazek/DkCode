@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace DK.LanguageServer
+namespace DK.Common
 {
-	static class Log
+	public static class Log
 	{
+		private static string _directory;
+		private static string _fileNamePattern;
 		private static StreamWriter _file;
 
 		enum LogLevel
@@ -15,6 +17,12 @@ namespace DK.LanguageServer
 			Info,
 			Warning,
 			Error
+		}
+
+		public static void Initialize(string directory, string fileNamePattern)
+		{
+			_directory = directory;
+			_fileNamePattern = fileNamePattern;
 		}
 
 		public static void Shutdown()
@@ -42,8 +50,9 @@ namespace DK.LanguageServer
 			try
 			{
 				if (_file != null) return true;
+				if (string.IsNullOrEmpty(_directory) || string.IsNullOrEmpty(_fileNamePattern)) return false;
 
-				_file = new StreamWriter(Path.Combine(Program.AppDataDir, string.Format(Properties.Resources.LogFileNameFormat, DateTime.Now)));
+				_file = new StreamWriter(Path.Combine(_directory, string.Format(_fileNamePattern, DateTime.Now)));
 				return true;
 			}
 			catch (Exception ex)

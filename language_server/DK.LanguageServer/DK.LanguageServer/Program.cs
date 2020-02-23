@@ -2,6 +2,7 @@
 using System.IO;
 using System.IO.Pipes;
 using System.Threading.Tasks;
+using DK.Common;
 
 namespace DK.LanguageServer
 {
@@ -11,6 +12,8 @@ namespace DK.LanguageServer
 		{
 			try
 			{
+				Log.Initialize(AppDataDir, Properties.Resources.LogFileNameFormat);
+
 				Environment.ExitCode = new Program().Run();
 
 				Log.Info("Shutting down normally.");

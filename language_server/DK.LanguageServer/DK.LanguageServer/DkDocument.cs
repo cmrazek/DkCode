@@ -2,27 +2,21 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using DK.Common;
+using DK.Language;
 using LSP = Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace DK.LanguageServer
 {
-	class Document
+	class DkDocument : Document
 	{
-		private Uri _uri;
-		private string _text;
-		private int _version;
 		private Jobs.ValidateDocumentJob _validateJob;
 
-		public Document(Uri uri, string text, int version)
+		public DkDocument(Uri uri, string text, int version)
+			: base(uri, text, version)
 		{
-			_uri = uri;
-			_text = text;
-			_version = version;
-		}
 
-		public string Text => _text;
-		public Uri Uri => _uri;
-		public int Version => _version;
+		}
 
 		public LSP.Position OffsetToLspPosition(int offset, int resumeOffset = 0, LSP.Position resumePosition = null)
 		{
@@ -39,9 +33,9 @@ namespace DK.LanguageServer
 				startingOffset = resumeOffset;
 			}
 
-			for (int i = startingOffset, ii = _text.Length; i < offset && i < ii; i++)
+			for (int i = startingOffset, ii = Text.Length; i < offset && i < ii; i++)
 			{
-				var ch = _text[i];
+				var ch = Text[i];
 				if (ch == '\n')
 				{
 					lineOffset++;
@@ -78,11 +72,11 @@ namespace DK.LanguageServer
 				}
 			}
 
-			for (int i = startingOffset, ii = _text.Length; i < ii; i++)
+			for (int i = startingOffset, ii = Text.Length; i < ii; i++)
 			{
 				if (lineOffset == position.Line && chOffset == position.Character) return i;
 
-				var ch = _text[i];
+				var ch = Text[i];
 				if (ch == '\n')
 				{
 					if (lineOffset == position.Line) return i;
@@ -99,7 +93,7 @@ namespace DK.LanguageServer
 				}
 			}
 
-			return _text.Length;
+			return Text.Length;
 		}
 
 		public Span LspRangeToSpan(LSP.Range range)
@@ -116,8 +110,8 @@ namespace DK.LanguageServer
 
 			var delta = 0;
 			foreach (var change in changes) delta += string.IsNullOrEmpty(change.Text) ? 0 : change.Text.Length;
-			var sb = new StringBuilder(_text.Length + delta);
-			sb.Append(_text);
+			var sb = new StringBuilder(Text.Length + delta);
+			sb.Append(Text);
 
 			foreach (var change in changes)
 			{
@@ -151,8 +145,8 @@ namespace DK.LanguageServer
 				}
 			}
 
-			_text = sb.ToString();
-			if (version.HasValue) _version = version.Value;
+			Text = sb.ToString();
+			if (version.HasValue) Version = version.Value;
 		}
 
 		public void Validate(LanguageServer server)
@@ -160,7 +154,7 @@ namespace DK.LanguageServer
 			var rx = new System.Text.RegularExpressions.Regex(@"\b([A-Z]{3,})\b");
 			var diags = new List<LSP.Diagnostic>();
 
-			foreach (var err in rx.Matches(_text).Cast<System.Text.RegularExpressions.Match>())
+			foreach (var err in rx.Matches(Text).Cast<System.Text.RegularExpressions.Match>())
 			{
 				var start = OffsetToLspPosition(err.Index);
 				var end = OffsetToLspPosition(err.Index + err.Length, err.Index, start);
@@ -179,7 +173,7 @@ namespace DK.LanguageServer
 
 			var parms = new LSP.PublishDiagnosticParams
 			{
-				Uri = _uri,
+				Uri = this.Uri,
 				Diagnostics = diags.ToArray()
 			};
 
