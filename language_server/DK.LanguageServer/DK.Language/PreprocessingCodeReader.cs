@@ -24,14 +24,12 @@ namespace DK.Language
 			_profile = profile ?? throw new ArgumentNullException(nameof(profile));
 			_uri = uri ?? throw new ArgumentNullException(nameof(uri));
 			_doc = document != null ? document : profile.GetDocument(uri);
-			_code.Append(_doc.Text, 0, new DocPosition(_doc, 0), isMainContent: true);
+			_code.Append(_doc.Text, 0, new DocPosition(_doc, 0), DocCharFlags.Visible);
 		}
 
 		#region Reading Methods
-		public override CodeTokenStream ReadAll()
+		public override void ReadAll(CodeTokenStream stream)
 		{
-			var outStream = new CodeTokenStream();
-
 			SkipWhite();
 
 			while (!EndOfFile)
@@ -41,26 +39,24 @@ namespace DK.Language
 
 				if (token.Value.Type == CodeType.Preprocessor)
 				{
-					outStream.Add(ReadPreprocessor(token.Value));
+					ReadPreprocessor(stream, token.Value);
 				}
 				else if (token.Value.Type == CodeType.Word)
 				{
 					if (_macros.TryGetMacro(token.Value.Text, out var macro))
 					{
-						outStream.Add(ReadMacroUsage(token.Value.ToNotCompiled(), macro));
+						ReadMacroUsage(stream, token.Value.ToNotCompiled(), macro);
 					}
 					else
 					{
-						outStream.Add(token.Value);
+						stream.Write(token.Value);
 					}
 				}
 				else
 				{
-					outStream.Add(token.Value);
+					stream.Write(token.Value);
 				}
 			}
-
-			return outStream;
 		}
 
 		public override int Position
@@ -175,60 +171,74 @@ namespace DK.Language
 		#endregion
 
 		#region Preprocessing
-		private CodeTokenStream ReadPreprocessor(CodeToken directiveToken)
+		private void ReadPreprocessor(CodeTokenStream stream, CodeToken directiveToken)
 		{
 			switch (directiveToken.Text)
 			{
 				case "#define":
-					return ReadDefine(directiveToken);
+					ReadDefine(stream, directiveToken);
+					return;
 				case "#elif":
 					Log.Error("#elif not implemented"); // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#else":
 					Log.Error("#else not implemented"); // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#endif":
 					Log.Error("#endif not implemented");    // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#if":
 					Log.Error("#if not implemented");   // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#ifdef":
 					Log.Error("#ifdef not implemented");    // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#ifndef":
 					Log.Error("#ifndef not implemented");   // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#include":
-					return ReadInclude(directiveToken);
+					ReadInclude(stream, directiveToken);
+					return;
 				case "#insert":
 					Log.Error("#insert not implemented");   // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#label":
 					Log.Error("#label not implemented");    // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#replace":
 					Log.Error("#replace not implemented");  // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#undef":
 					Log.Error("#undef not implemented");    // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#warnadd":
 					Log.Error("#warnadd not implemented");  // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				case "#warndel":
 					Log.Error("#warndel not implemented");  // TODO
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 				default:
 					Log.Warning("Unrecognized preprocessor directive '{0}'.", directiveToken.Text);
-					return new CodeTokenStream(directiveToken);
+					stream.Write(directiveToken);
+					return;
 			}
 		}
 
-		private CodeTokenStream ReadDefine(CodeToken directiveToken)
+		private void ReadDefine(CodeTokenStream stream, CodeToken directiveToken)
 		{
-			var outStream = new CodeTokenStream();
-			outStream.Add(directiveToken);
+			stream.Write(directiveToken);
 
 			// Read the macro name
 			SkipWhite(stayOnSameLine: true);
@@ -236,9 +246,9 @@ namespace DK.Language
 			if (string.IsNullOrEmpty(name))
 			{
 				Log.Warning("No name after #define at {0}", _build.StartPosition);
-				return outStream;
+				return;
 			}
-			outStream.Add(BuildToToken(CodeType.MacroName, compiled: false));
+			stream.Write(BuildToToken(CodeType.MacroName, compiled: false));
 
 			// Read optional arguments
 			List<string> argNames = null;
@@ -246,7 +256,7 @@ namespace DK.Language
 			if (PeekChar() == '(')
 			{
 				Build(1);
-				outStream.Add(BuildToToken(CodeType.OpenBracket, compiled: false));
+				stream.Write(BuildToToken(CodeType.OpenBracket, compiled: false));
 
 				// This is a macro with parameters
 				argNames = new List<string>();
@@ -255,12 +265,12 @@ namespace DK.Language
 					SkipWhite(stayOnSameLine: true);
 					if (BuildExact(')'))
 					{
-						outStream.Add(BuildToToken(CodeType.CloseBracket, compiled: false));
+						stream.Write(BuildToToken(CodeType.CloseBracket, compiled: false));
 						break;
 					}
 					if (BuildExact(','))
 					{
-						outStream.Add(BuildToToken(CodeType.Comma, compiled: false));
+						stream.Write(BuildToToken(CodeType.Comma, compiled: false));
 						continue;
 					}
 
@@ -268,43 +278,41 @@ namespace DK.Language
 					if (!string.IsNullOrEmpty(argName))
 					{
 						argNames.Add(argName);
-						outStream.Add(BuildToToken(CodeType.Argument, compiled: false));
+						stream.Write(BuildToToken(CodeType.Argument, compiled: false));
 					}
 					else break;
 				}
 			}
 
 			// Read macro body
-			var bodyTokens = new CodeTokenStream();
+			var bodyTokens = new CodeTokenCollection();
 			SkipWhite(stayOnSameLine: true);
 			if (BuildExact('{'))
 			{
 				// The body is enclosed in { }
-				outStream.Add(BuildToToken(CodeType.OpenBrace, compiled: false));
+				stream.Write(BuildToToken(CodeType.OpenBrace, compiled: false));
 
 				SkipWhite();
 				while (!EndOfFile)
 				{
 					if (BuildExact('}'))
 					{
-						outStream.Add(BuildToToken(CodeType.CloseBrace, compiled: false));
+						stream.Write(BuildToToken(CodeType.CloseBrace, compiled: false));
 						break;
 					}
 
-					foreach (var token in ReadSimpleNestable(CodeType.CloseBrace))
+					ReadSimpleNestable(stream.FilterOne(token =>
 					{
 						if (argNames != null && token.Type == CodeType.Word && argNames.Contains(token.Text))
 						{
 							var argToken = token.ToType(CodeType.Argument);
-							outStream.Add(argToken);
 							bodyTokens.Add(argToken);
+							return argToken;
 						}
-						else
-						{
-							outStream.Add(token);
-							bodyTokens.Add(token);
-						}
-					}
+
+						bodyTokens.Add(token);
+						return token;
+					}), CodeType.CloseBrace);
 
 					SkipWhite();
 				}
@@ -322,13 +330,13 @@ namespace DK.Language
 					{
 						if (IsEndOfLineChar(PeekChar()))
 						{
-							outStream.Add(BuildToToken(CodeType.LineContinue, compiled: false));
+							stream.Write(BuildToToken(CodeType.LineContinue, compiled: false));
 							SkipExact('\r');
 							SkipExact('\n');
 						}
 						else
 						{
-							outStream.Add(BuildToToken(CodeType.Invalid, compiled: true));
+							stream.Write(BuildToToken(CodeType.Invalid, compiled: true));
 						}
 						continue;
 					}
@@ -339,13 +347,13 @@ namespace DK.Language
 						if (argNames != null && token.Value.Type == CodeType.Word && argNames.Contains(token.Value.Text))
 						{
 							var argToken = token.Value.ToType(CodeType.Argument);
-							outStream.Add(argToken);
 							bodyTokens.Add(argToken);
+							stream.Write(argToken);
 						}
 						else
 						{
-							outStream.Add(token.Value);
 							bodyTokens.Add(token.Value);
+							stream.Write(token.Value);
 						}
 					}
 
@@ -354,14 +362,12 @@ namespace DK.Language
 			}
 
 			_macros.Add(new Macro(name, argNames != null ? argNames.ToArray() : null, bodyTokens));
-			return outStream;
 		}
 
-		private CodeTokenStream ReadMacroUsage(CodeToken nameToken, Macro macro)
+		private void ReadMacroUsage(CodeTokenStream stream, CodeToken nameToken, Macro macro)
 		{
-			var outStream = new CodeTokenStream();
-			outStream.Add(nameToken.ToNotCompiled().ToType(CodeType.MacroName));
-			if (!macro.HasBody) return outStream;
+			stream.Write(nameToken.ToNotCompiled().ToType(CodeType.MacroName));
+			if (!macro.HasBody) return;
 
 			if (macro.HasArguments)
 			{
@@ -373,32 +379,32 @@ namespace DK.Language
 				else
 				{
 					Build(1);
-					outStream.Add(BuildToToken(CodeType.OpenBracket, compiled: false));
+					stream.Write(BuildToToken(CodeType.OpenBracket, compiled: false));
 
-					var args = new List<CodeTokenStream>();
-					var curArg = new CodeTokenStream();
+					var args = new List<CodeTokenCollection>();
+					var curArg = new CodeTokenCollection();
 					SkipWhite();
 					while (!EndOfFile)
 					{
 						if (PeekChar() == ')')
 						{
 							Build(1);
-							outStream.Add(BuildToToken(CodeType.CloseBracket, compiled: false));
+							stream.Write(BuildToToken(CodeType.CloseBracket, compiled: false));
 							break;
 						}
 						if (PeekChar() == ',')
 						{
 							Build(1);
-							outStream.Add(BuildToToken(CodeType.Comma, compiled: false));
+							stream.Write(BuildToToken(CodeType.Comma, compiled: false));
 							SkipWhite();
 							continue;
 						}
 
-						foreach (var token in ReadSimpleNestable(CodeType.CloseBracket))
+						ReadSimpleNestable(stream.FilterOne(token =>
 						{
-							outStream.Add(token.ToNotCompiled());
 							curArg.Add(token);
-						}
+							return token.ToNotCompiled();
+						}), CodeType.CloseBracket);
 
 						SkipWhite();
 					}
@@ -416,27 +422,19 @@ namespace DK.Language
 							subMacros.Add(new Macro(argNames[a], null, args[a]));
 						}
 
-						foreach (var token in ResolveTokens(macro.Body, subMacros))
-						{
-							outStream.Add(token.ToMainSpan(Span.FromPosition(MainPosition)));
-						}
+						ResolveTokens(stream.FilterOne(t => t.ToMainSpan(Span.FromPosition(MainPosition))), macro.Body, subMacros);
 					}
 				}
 			}
 			else // No arguments
 			{
-				foreach (var token in ResolveTokens(macro.Body, _macros))
-				{
-					outStream.Add(token.ToMainSpan(Span.FromPosition(MainPosition)));
-				}
+				ResolveTokens(stream.FilterOne(t => t.ToMainSpan(Span.FromPosition(MainPosition))), macro.Body, _macros);
 			}
-
-			return outStream;
 		}
 
-		private CodeTokenStream ResolveTokens(CodeTokenStream inStream, MacroStore macros)
+		private void ResolveTokens(CodeTokenStream stream, CodeTokenCollection inStream, MacroStore macros)
 		{
-			var outStream = new CodeTokenStream();
+			var outStream = new CodeTokenCollection();
 
 			while (true)
 			{
@@ -460,8 +458,8 @@ namespace DK.Language
 								{
 									var savePos = inStream.Position;
 									var openArgsToken = inStream.Read();
-									var args = new List<CodeTokenStream>();
-									var curArg = new CodeTokenStream();
+									var args = new List<CodeTokenCollection>();
+									var curArg = new CodeTokenCollection();
 									var stack = new Stack<CodeType>();
 									while (!inStream.EndOfStream)
 									{
@@ -477,7 +475,7 @@ namespace DK.Language
 										else if (tok.Type == CodeType.Comma)
 										{
 											args.Add(curArg);
-											curArg = new CodeTokenStream();
+											curArg = new CodeTokenCollection();
 										}
 										else if (tok.Type == CodeType.OpenArray || tok.Type == CodeType.OpenBrace || tok.Type == CodeType.OpenBracket)
 										{
@@ -499,13 +497,13 @@ namespace DK.Language
 									{
 										var subMacros = macros.AddScope();
 										for (int a = 0, aa = args.Count; a < aa; a++) subMacros.Add(new Macro(argNames[a], null, args[a]));
-										outStream.Add(ResolveTokens(macro.Body, subMacros));
+										ResolveTokens(outStream, macro.Body, subMacros);
 									}
 								}
 							}
 							else
 							{
-								outStream.Add(ResolveTokens(macro.Body, macros));
+								ResolveTokens(outStream, macro.Body, macros);
 							}
 						}
 					}
@@ -520,18 +518,17 @@ namespace DK.Language
 					// Run it through the resolver another time until no more macros are found
 					inStream = outStream;
 					inStream.Position = 0;
-					outStream = new CodeTokenStream();
+					outStream = new CodeTokenCollection();
 				}
 				else break;
 			}
 
-			return outStream;
+			foreach (var t in outStream) stream.Write(t);
 		}
 
-		private CodeTokenStream ReadInclude(CodeToken directiveToken)
+		private void ReadInclude(CodeTokenStream stream, CodeToken directiveToken)
 		{
-			var outStream = new CodeTokenStream();
-			outStream.Add(directiveToken);
+			stream.Write(directiveToken);
 
 			var fileNameSB = new StringBuilder();
 			BuildClear();
@@ -555,20 +552,18 @@ namespace DK.Language
 					fileNameSB.Append(ch);
 				}
 
-				outStream.Add(BuildToToken(CodeType.StringLiteral, compiled: false));
+				stream.Write(BuildToToken(CodeType.StringLiteral, compiled: false));
 
 				var includeDoc = _profile.TryGetIncludeFile(fileNameSB.ToString(), directiveToken.Position.Document, includeSystemPaths);
 				if (includeDoc != null)
 				{
-					_code.InsertDoc(_pos, includeDoc.Text, includeDoc);
+					_code.InsertDoc(_pos, includeDoc.Text, includeDoc, DocCharFlags.None);
 				}
 				else
 				{
 					Log.Warning("Include file {2}{0}{3} not found from document '{1}'", fileNameSB, directiveToken.Position.Document, startCh, endCh);
 				}
 			}
-
-			return outStream;
 		}
 		#endregion
 	}

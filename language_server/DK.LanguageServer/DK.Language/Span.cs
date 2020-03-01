@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DK.Language
 {
-	public class Span
+	public struct Span
 	{
 		private int _start;
 		private int _length;

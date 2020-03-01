@@ -8,9 +8,9 @@ namespace DK.Language.Preprocessor
 	{
 		public string Name { get; private set; }
 		public string[] Arguments { get; private set; }
-		public CodeTokenStream Body { get; private set; }
+		public CodeTokenCollection Body { get; private set; }
 
-		public Macro(string name, string[] arguments, CodeTokenStream body)
+		public Macro(string name, string[] arguments, CodeTokenCollection body)
 		{
 			if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 			Name = name;

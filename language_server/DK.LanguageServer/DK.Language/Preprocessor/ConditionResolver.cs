@@ -17,75 +17,93 @@ namespace DK.Language.Preprocessor
 			if (macros == null) throw new ArgumentNullException(nameof(macros));
 
 			var rdr = new SimpleCodeReader(conditionText, 0, DocPosition.Empty);
-			var resolvedTokens = ResolveTokens(new CodeTokenStream(rdr.ReadAll()), macros).ToArray();
-			var group = new Node(GroupifyTokens(new CodeTokenStream(resolvedTokens)));
+			var tokens = new CodeTokenCollection();
+			rdr.ReadAll(tokens);
+
+			var resolvedTokens = new CodeTokenCollection();
+			ResolveTokens(resolvedTokens, tokens, macros);
+			var group = new Node(GroupifyTokens(resolvedTokens));
 
 			var value = group.GetValue();
 			if (value.HasValue) return value.Value != 0;
 			return null;
 		}
 
-		private CodeTokenStream ResolveTokens(CodeTokenStream stream, MacroStore macros)
+		private void ResolveTokens(CodeTokenStream streamOut, CodeTokenCollection stream, MacroStore macros)
 		{
-			var outStream = new CodeTokenStream();
+			var outStream = new CodeTokenCollection();
 
-			while (!stream.EndOfStream)
+			while (true)
 			{
-				var token = stream.Read();
-				if (token.Type == CodeType.Word && macros.TryGetMacro(token.Text, out var macro))
+				var gotMacro = false;
+
+				while (!stream.EndOfStream)
 				{
-					if (macro.HasBody)
+					var token = stream.Read();
+					if (token.Type == CodeType.Word && macros.TryGetMacro(token.Text, out var macro))
 					{
-						if (macro.HasArguments)
+						gotMacro = true;
+						if (macro.HasBody)
 						{
-							var savePos = stream.Position;
-							var args = ParseArgumentTokens(stream, macros);
-							var argNames = macro.Arguments;
-							if (args.Length != argNames.Length)
+							if (macro.HasArguments)
 							{
-								Log.Warning("Call of macro '{0}' has {1} argument(s) but expected {2}.", macro.Name, args.Length, argNames.Length);
-								// Just add the token name as-is
-								stream.Position = savePos + 1;
-								outStream.Add(token);
+								var savePos = stream.Position;
+								var args = ParseArgumentTokens(stream, macros);
+								var argNames = macro.Arguments;
+								if (args.Length != argNames.Length)
+								{
+									Log.Warning("Call of macro '{0}' has {1} argument(s) but expected {2}.", macro.Name, args.Length, argNames.Length);
+									// Just add the token name as-is
+									stream.Position = savePos + 1;
+									outStream.Add(token);
+								}
+								else
+								{
+									var subMacros = macros.AddScope();
+									for (int a = 0; a < args.Length; a++) subMacros.Add(new Macro(argNames[a], null, args[a]));
+									ResolveTokens(outStream, macro.Body, subMacros);
+								}
 							}
 							else
 							{
-								var subMacros = macros.AddScope();
-								for (int a = 0; a < args.Length; a++) subMacros.Add(new Macro(argNames[a], null, args[a]));
-								outStream.Add(ResolveTokens(macro.Body, subMacros));
+								ResolveTokens(outStream, macro.Body, macros);
 							}
 						}
 						else
 						{
-							outStream.Add(ResolveTokens(macro.Body, macros));
+							// Macro has no body so this can simply be omitted
 						}
 					}
 					else
 					{
-						// Macro has no body so this can simply be omitted
+						outStream.Add(token);
 					}
 				}
-				else
+
+				if (gotMacro)
 				{
-					outStream.Add(token);
+					stream = outStream;
+					stream.Position = 0;
+					outStream = new CodeTokenCollection();
 				}
+				else break;
 			}
 
-			return outStream;
+			foreach (var t in outStream) streamOut.Write(t);
 		}
 
-		private CodeTokenStream[] ParseArgumentTokens(CodeTokenStream stream, MacroStore macros)
+		private CodeTokenCollection[] ParseArgumentTokens(CodeTokenCollection stream, MacroStore macros)
 		{
-			var args = new List<CodeTokenStream>();
+			var args = new List<CodeTokenCollection>();
 
 			if (stream.EndOfStream || stream.Peek().Type != CodeType.OpenBracket)
 			{
-				return new CodeTokenStream[0];
+				return new CodeTokenCollection[0];
 			}
 
 			stream.Read();
 
-			var curArg = new CodeTokenStream();
+			var curArg = new CodeTokenCollection();
 			var stack = new Stack<CodeType>();
 			while (!stream.EndOfStream)
 			{
@@ -103,7 +121,7 @@ namespace DK.Language.Preprocessor
 				if (token.Type == CodeType.Comma)
 				{
 					args.Add(curArg);
-					curArg = new CodeTokenStream();
+					curArg = new CodeTokenCollection();
 					continue;
 				}
 				if (token.Type == CodeType.OpenArray || token.Type == CodeType.OpenBrace || token.Type == CodeType.OpenBracket)
@@ -117,15 +135,17 @@ namespace DK.Language.Preprocessor
 			}
 
 			args.Add(curArg);
-			var retArgs = new List<CodeTokenStream>();
+			var retArgs = new List<CodeTokenCollection>();
 			foreach (var arg in args)
 			{
-				retArgs.Add(ResolveTokens(arg, macros));
+				var retArg = new CodeTokenCollection();
+				ResolveTokens(retArg, arg, macros);
+				retArgs.Add(retArg);
 			}
 			return retArgs.ToArray();
 		}
 
-		private IEnumerable<Node> GroupifyTokens(CodeTokenStream stream)
+		private IEnumerable<Node> GroupifyTokens(CodeTokenCollection stream)
 		{
 			while (!stream.EndOfStream)
 			{
@@ -141,7 +161,7 @@ namespace DK.Language.Preprocessor
 			}
 		}
 
-		private Node ReadTokenGroup(CodeTokenStream stream)
+		private Node ReadTokenGroup(CodeTokenCollection stream)
 		{
 			var nodes = new List<Node>();
 

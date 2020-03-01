@@ -67,10 +67,10 @@ namespace DK.Test
 
 			using (var rep = new System.IO.StreamWriter(outputReport))
 			{
-				foreach (var token in rdr.ReadAll())
+				rdr.ReadAll(new CodeTokenListener(token =>
 				{
 					rep.WriteLine(token.ToString());
-				}
+				}));
 			}
 		}
 	}

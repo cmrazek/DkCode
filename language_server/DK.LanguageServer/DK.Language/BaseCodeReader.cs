@@ -29,15 +29,13 @@ namespace DK.Language
 
 		private bool _lastTokenSupportsNegative = true;
 
-		public virtual CodeTokenStream ReadAll()
+		public virtual void ReadAll(CodeTokenStream stream)
 		{
-			var outStream = new CodeTokenStream();
 			while (!EndOfFile)
 			{
 				var tok = ReadSimple();
-				if (tok.HasValue) outStream.Add(tok.Value);
+				if (tok.HasValue) stream.Write(tok.Value);
 			}
-			return outStream;
 		}
 
 		public CodeToken? ReadSimple(bool stayOnSameLine = false)
@@ -198,30 +196,26 @@ namespace DK.Language
 			return BuildToToken(CodeType.Invalid, compiled: true);
 		}
 
-		public CodeTokenStream ReadSimpleNestable(CodeType? stopAtType)
+		public void ReadSimpleNestable(CodeTokenStream stream, CodeType? stopAtType)
 		{
-			var outStream = new CodeTokenStream();
-
 			var token = ReadSimple();
-			if (!token.HasValue) return outStream;
-			outStream.Add(token.Value);
+			if (!token.HasValue) return;
+			stream.Write(token.Value);
 
-			if (stopAtType.HasValue && token.Value.Type == stopAtType.Value) return outStream;
+			if (stopAtType.HasValue && token.Value.Type == stopAtType.Value) return;
 
 			switch (token.Value.Type)
 			{
 				case CodeType.OpenBracket:
-					outStream.Add(ReadSimpleNestable(CodeType.CloseBracket));
+					ReadSimpleNestable(stream, CodeType.CloseBracket);
 					break;
 				case CodeType.OpenBrace:
-					outStream.Add(ReadSimpleNestable(CodeType.CloseBrace));
+					ReadSimpleNestable(stream, CodeType.CloseBrace);
 					break;
 				case CodeType.OpenArray:
-					outStream.Add(ReadSimpleNestable(CodeType.CloseArray));
+					ReadSimpleNestable(stream, CodeType.CloseArray);
 					break;
 			}
-
-			return outStream;
 		}
 
 		public void SkipWhite(bool stayOnSameLine = false)

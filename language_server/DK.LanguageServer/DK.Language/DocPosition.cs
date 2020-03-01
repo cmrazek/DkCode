@@ -22,7 +22,7 @@ namespace DK.Language
 		public Document Document => _doc;
 		public int Position => _pos;
 
-		public override string ToString() => $"[Doc:{_doc.Uri} Offset:{_pos}]";
+		public override string ToString() => $"[{_doc.Uri} Offset:{_pos}]";
 
 		public static DocPosition operator +(DocPosition docPos, int offset)
 		{
