@@ -2,7 +2,7 @@
   "profiles": {
     "DK.Test": {
       "commandName": "Project",
-      "commandLineArgs": "preprocess \"D:\\CCSSRC1\\prod\\DICT\" \"c:\\temp\\dict.txt\""
+      "commandLineArgs": "preprocess \"D:\\CCSSRC1\\prod\\test\\testprog.sp\" \"c:\\temp\\testprog.sp.txt\""
     }
   }
 }

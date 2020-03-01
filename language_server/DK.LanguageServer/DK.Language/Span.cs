@@ -19,6 +19,17 @@ namespace DK.Language
 			_length = length;
 		}
 
+		public static Span FromPosition(int a)
+		{
+			return new Span(a, 0);
+		}
+
+		public static Span FromPosition(int a, int b)
+		{
+			if (a <= b) return new Span(a, b - a);
+			else return new Span(b, a - b);
+		}
+
 		public int Start
 		{
 			get { return _start; }

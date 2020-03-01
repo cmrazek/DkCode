@@ -1,989 +1,574 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using DK.Common;
+using DK.Language.Preprocessor;
 
 namespace DK.Language
 {
 	/// <summary>
 	/// Reads code while applying preprocessing inline as it's encountered
 	/// </summary>
-	public class PreprocessingCodeReader
+	public class PreprocessingCodeReader : BaseCodeReader
 	{
 		private DkProfile _profile;
 		private Uri _uri;
 		private Document _doc;
-		private List<CodeSegment> _segments = new List<CodeSegment>();
-		private int _mainLength;
-		private bool _lastTokenSupportsNegative = true;
+		private DocStringBuilder _code = new DocStringBuilder();
+		private int _pos;
+		private MacroStore _macros = new MacroStore();
 
 		public PreprocessingCodeReader(DkProfile profile, Uri uri, Document document)
 		{
 			_profile = profile ?? throw new ArgumentNullException(nameof(profile));
 			_uri = uri ?? throw new ArgumentNullException(nameof(uri));
-
-			if (document != null)
-			{
-				if (document.Text.Length > 0) _segments.Add(new CodeSegment(document, 0, document.Text, 0, 0));
-				_mainLength = document.Text.Length;
-				_doc = document;
-			}
-			else
-			{
-				_doc = profile.GetDocument(uri);
-				if (_doc.Text.Length > 0) _segments.Add(new CodeSegment(_doc, 0, _doc.Text, 0, 0));
-				_mainLength = _doc.Text.Length;
-			}
+			_doc = document != null ? document : profile.GetDocument(uri);
+			_code.Append(_doc.Text, 0, new DocPosition(_doc, 0), isMainContent: true);
 		}
 
 		#region Reading Methods
-		// The following properties get set for each read
-		private StringBuilder _text = new StringBuilder();
-
-		private CodeToken? ReadSimple(CodeSegment withinSegment)
+		public override CodeTokenStream ReadAll()
 		{
-			SkipWhite(withinSegment);
+			var outStream = new CodeTokenStream();
 
-			if (EndOfFile(withinSegment)) return null;
+			SkipWhite();
 
-			_text.Clear();
-
-			var mainStart = MainPosition;
-			var docStart = DocPosition;
-			var ch = PeekChar(withinSegment);
-			if (IsWordChar(ch, true))
+			while (!EndOfFile)
 			{
-				_text.Append(ch);
-				Skip(1);
-				while (IsWordChar(PeekChar(withinSegment), false)) _text.Append(ReadChar(withinSegment));
-				SkipWhite(withinSegment);
-
-				var chain = false;
-				while (PeekChar(withinSegment) == '.')
-				{
-					_text.Append('.');
-					Skip(1);
-					chain = true;
-					SkipWhite(withinSegment);
-
-					var first = true;
-					while (IsWordChar(PeekChar(withinSegment), first))
-					{
-						_text.Append(ReadChar(withinSegment));
-						first = false;
-					}
-
-					SkipWhite(withinSegment);
-				}
-
-				return new CodeToken(
-					text: _text.ToString(),
-					type: chain ? CodeType.Chain : CodeType.Word,
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: true);
-			}
-
-			if (IsDigitChar(ch))
-			{
-				while (IsDigitChar(PeekChar(withinSegment))) _text.Append(ReadChar(withinSegment));
-				if (PeekChar(withinSegment) == '.')
-				{
-					_text.Append(ReadChar(withinSegment));
-					while (IsDigitChar(PeekChar(withinSegment))) _text.Append(ReadChar(withinSegment));
-				}
-
-				_lastTokenSupportsNegative = false;
-				return new CodeToken(
-					text: _text.ToString(),
-					type: CodeType.Number,
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: true);
-			}
-
-			if (ch == '\"' || ch == '\'')
-			{
-				var startCh = ch;
-				_text.Append(ch);
-				Skip(1);
-
-				while (!EndOfFile(withinSegment))
-				{
-					ch = PeekChar(withinSegment);
-					if (ch == startCh)
-					{
-						_text.Append(ch);
-						Skip(1);
-						break;
-					}
-					else if (ch == '\\') _text.Append(Read(2, withinSegment));
-					else if (IsEndOfLineChar(ch)) break;
-					else _text.Append(ReadChar(withinSegment));
-				}
-
-				_lastTokenSupportsNegative = false;
-				return new CodeToken(
-					text: _text.ToString(),
-					type: CodeType.StringLiteral,
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: true);
-			}
-
-			if (ch == '-')
-			{
-				ch = PeekChar(withinSegment);
-				if (_lastTokenSupportsNegative && IsDigitChar(ch))
-				{
-					_text.Append('-');
-					while (IsDigitChar(PeekChar(withinSegment))) _text.Append(ReadChar(withinSegment));
-					if (PeekChar(withinSegment) == '.')
-					{
-						_text.Append(ReadChar(withinSegment));
-						while (IsDigitChar(PeekChar(withinSegment))) _text.Append(ReadChar(withinSegment));
-					}
-					_lastTokenSupportsNegative = false;
-					return new CodeToken(
-						text: _text.ToString(),
-						type: CodeType.Number,
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-				else if (ch == '=')
-				{
-					Skip(2);
-					_lastTokenSupportsNegative = true;
-					return new CodeToken(
-						text: "-=",
-						type: CodeType.SubractAssign,
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-				else
-				{
-					Skip(1);
-					_lastTokenSupportsNegative = true;
-					return new CodeToken(
-						text: "-",
-						type: CodeType.Subtract,
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-			}
-
-			if (ch == '+' || ch == '*' || ch == '/' || ch == '%' || ch == '=')
-			{
-				if (PeekChar(withinSegment) == '=')
-				{
-					Skip(2);
-					var op = string.Concat(ch, "=");
-					_lastTokenSupportsNegative = true;
-					return new CodeToken(
-						text: op,
-						type: OperatorToCodeType(op),
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-				else
-				{
-					Skip(1);
-					_lastTokenSupportsNegative = true;
-					return new CodeToken(
-						text: ch.ToString(),
-						type: OperatorToCodeType(ch.ToString()),
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-			}
-
-			if (ch == '!')
-			{
-				if (PeekChar(withinSegment) == '=')
-				{
-					Skip(2);
-					_lastTokenSupportsNegative = true;
-					return new CodeToken(
-						text: "!=",
-						type: CodeType.NotEqual,
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-				else
-				{
-					Skip(1);
-					return new CodeToken(
-						text: "!",
-						type: CodeType.Invalid,
-						mainSpan: new Span(mainStart, MainPosition - mainStart),
-						position: docStart,
-						compiled: true);
-				}
-			}
-
-			if (ch == '(' || ch == '[' || ch == '{' || ch == ',')
-			{
-				Skip(1);
-				_lastTokenSupportsNegative = true;
-				return new CodeToken(
-					text: ch.ToString(),
-					type: OperatorToCodeType(ch.ToString()),
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: true);
-			}
-
-			if (ch == ')' || ch == ']' || ch == '}')
-			{
-				Skip(1);
-				_lastTokenSupportsNegative = false;
-				return new CodeToken(
-					text: ch.ToString(),
-					type: OperatorToCodeType(ch.ToString()),
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: true);
-			}
-
-			if (ch == '#')
-			{
-				_text.Append('#');
-				Skip(1);
-				while (IsAlphaChar(PeekChar(withinSegment))) _text.Append(ReadChar(withinSegment));
-				return new CodeToken(
-					text: _text.ToString(),
-					type: CodeType.Preprocessor,
-					mainSpan: new Span(mainStart, MainPosition - mainStart),
-					position: docStart,
-					compiled: false);
-			}
-
-			Skip(1);
-			return new CodeToken(
-				text: ch.ToString(),
-				type: CodeType.Invalid,
-				mainSpan: new Span(mainStart, MainPosition - mainStart),
-				position: docStart,
-				compiled: true);
-		}
-
-		private IEnumerable<CodeToken> ReadSimpleNestable(CodeSegment withinSegment, CodeType? stopAtType)
-		{
-			var token = ReadSimple(withinSegment);
-			if (!token.HasValue) yield break;
-
-			yield return token.Value;
-
-			if (stopAtType.HasValue && token.Value.Type == stopAtType.Value) yield break;
-
-			switch (token.Value.Type)
-			{
-				case CodeType.OpenBracket:
-					foreach (var t in ReadSimpleNestable(withinSegment, CodeType.CloseBracket)) yield return t;
-					break;
-				case CodeType.OpenBrace:
-					foreach (var t in ReadSimpleNestable(withinSegment, CodeType.CloseBrace)) yield return t;
-					break;
-				case CodeType.OpenArray:
-					foreach (var t in ReadSimpleNestable(withinSegment, CodeType.CloseArray)) yield return t;
-					break;
-			}
-		}
-
-		public IEnumerable<CodeToken> ReadAll()
-		{
-			SkipWhite(null);
-
-			while (!EndOfFile(null))
-			{
-				var tokenSegment = CurrentSegment;
-				var token = ReadSimple(null);
+				var token = ReadSimple();
 				if (!token.HasValue) continue;
 
 				if (token.Value.Type == CodeType.Preprocessor)
 				{
-					foreach (var t in ReadPreprocessor(token.Value, tokenSegment)) yield return t;
+					outStream.Add(ReadPreprocessor(token.Value));
+				}
+				else if (token.Value.Type == CodeType.Word)
+				{
+					if (_macros.TryGetMacro(token.Value.Text, out var macro))
+					{
+						outStream.Add(ReadMacroUsage(token.Value.ToNotCompiled(), macro));
+					}
+					else
+					{
+						outStream.Add(token.Value);
+					}
 				}
 				else
 				{
-					yield return token.Value;
-				}
-			}
-		}
-
-		public static CodeType OperatorToCodeType(string op)
-		{
-			switch (op)
-			{
-				case "=": return CodeType.Assign;
-				case "==": return CodeType.Equal;
-				case "!=": return CodeType.NotEqual;
-				case "+": return CodeType.Add;
-				case "+=": return CodeType.AddAssign;
-				case "-": return CodeType.Subtract;
-				case "-=": return CodeType.SubractAssign;
-				case "*": return CodeType.Multiply;
-				case "*=": return CodeType.MultiplyAssign;
-				case "/": return CodeType.Divide;
-				case "/=": return CodeType.DivideAssign;
-				case "%": return CodeType.Modulus;
-				case "%=": return CodeType.ModulusAssign;
-				case "(": return CodeType.OpenBracket;
-				case ")": return CodeType.CloseBracket;
-				case "[": return CodeType.OpenArray;
-				case "]": return CodeType.CloseArray;
-				case "{": return CodeType.OpenBrace;
-				case "}": return CodeType.CloseBrace;
-				case ",": return CodeType.Comma;
-				default: return CodeType.Invalid;
-			}
-		}
-
-		private char ReadChar(CodeSegment withinSegment)
-		{
-			if (_segments.Count == 0) throw new EndOfFileException();
-			if (withinSegment != null && !_segments.Contains(withinSegment)) return '\0';
-
-			var seg = _segments[_segments.Count - 1];
-			var ch = seg.Code[seg.Position++];
-			if (seg.Position >= seg.Code.Length)
-			{
-				_segments.Remove(seg);
-				if (_segments.Count > 0) _segments[_segments.Count - 1].Position = seg.ReturnOffset;
-			}
-			return ch;
-		}
-
-		private char PeekChar(CodeSegment withinSegment)
-		{
-			if (_segments.Count == 0) return '\0';
-			if (withinSegment != null && !_segments.Contains(withinSegment)) return '\0';
-
-			var seg = _segments[_segments.Count - 1];
-			return seg.Code[seg.Position];
-		}
-
-		private int Read(int length, CodeSegment withinSegment)
-		{
-			if (_segments.Count == 0 || length == 0) return 0;
-
-			var remain = length;
-			var skipped = 0;
-
-			while (remain > 0 && (withinSegment == null || _segments.Contains(withinSegment)))
-			{
-				var seg = _segments[_segments.Count - 1];
-				var available = seg.Code.Length - seg.Position;
-				if (available > remain)
-				{
-					_text.Append(seg.Code.Substring(seg.Position, remain));
-					seg.Position += remain;
-					skipped += remain;
-					break;
-				}
-				else
-				{
-					_text.Append(seg.Code.Substring(seg.Position, available));
-					remain -= available;
-					skipped += available;
-					_segments.Remove(seg);
-					if (_segments.Count > 0) _segments[_segments.Count - 1].Position = seg.ReturnOffset;
+					outStream.Add(token.Value);
 				}
 			}
 
-			return skipped;
+			return outStream;
 		}
 
-		private string Peek(int length, CodeSegment withinSegment)
+		public override int Position
 		{
-			if (_segments.Count == 0 || length == 0) return string.Empty;
-
-			var ret = string.Empty;
-			var remain = length;
-			var segIndex = _segments.Count - 1;
-			var offset = _segments[segIndex].Position;
-
-			while (remain > 0 && (withinSegment == null || _segments.Contains(withinSegment)))
+			get => _pos;
+			set
 			{
-				var seg = _segments[segIndex];
-				var available = seg.Code.Length - offset;
-				if (available > remain)
-				{
-					ret += seg.Code.Substring(offset, remain);
-					break;
-				}
-				else
-				{
-					ret += seg.Code.Substring(offset, available);
-					remain -= available;
-					offset = seg.ReturnOffset;
-					if (segIndex-- == 0) break;
-				}
+				if (value < 0 || value > _build.Length) throw new ArgumentOutOfRangeException();
+				_pos = value;
 			}
-
-			return ret;
 		}
 
-		private int Skip(int length)
+		public override char PeekChar()
 		{
-			if (_segments.Count == 0 || length == 0) return 0;
-
-			var remain = length;
-			var skipped = 0;
-
-			while (remain > 0)
-			{
-				var seg = _segments[_segments.Count - 1];
-				var available = seg.Code.Length - seg.Position;
-				if (available > remain)
-				{
-					seg.Position += remain;
-					skipped += remain;
-					break;
-				}
-				else
-				{
-					remain -= available;
-					skipped += available;
-					_segments.Remove(seg);
-					if (_segments.Count > 0) _segments[_segments.Count - 1].Position = seg.ReturnOffset;
-				}
-			}
-
-			return skipped;
+			if (_pos >= _code.Length) return '\0';
+			return _code[_pos].Char;
 		}
 
-		private bool ReadExact(char ch, CodeSegment withinSegment)
+		public int MainPosition => _code.GetMainPosition(_pos);
+
+		public override void Skip(int count)
 		{
-			if (PeekChar(withinSegment) == ch)
+			if (_pos + count <= _code.Length) _pos += count;
+			else _pos = _code.Length;
+		}
+
+		public override bool SkipExact(char ch)
+		{
+			if (_pos < _code.Length && _code[_pos].Char == ch)
 			{
-				Skip(1);
+				_pos++;
 				return true;
 			}
-
 			return false;
 		}
 
-		private bool PeekExact(char ch, CodeSegment withinSegment)
+		public override char PeekChar(int offset)
 		{
-			return PeekChar(withinSegment) == ch;
+			if (_pos >= _code.Length) return '\0';
+			return _code[_pos].Char;
 		}
 
-		private string ReadWord(CodeSegment withinSegment)
+		public override string PeekString(int length)
 		{
-			_text.Clear();
-			var first = true;
-			while (IsWordChar(PeekChar(withinSegment), first))
+			if (_pos + length <= _code.Length)
 			{
-				_text.Append(ReadChar(withinSegment));
-				first = false;
+				return _code.Substring(_pos, length).Text;
 			}
-			return _text.ToString();
-		}
-
-		private string ReadRawTextToEndOfLine(CodeSegment withinSegment)
-		{
-			_text.Clear();
-			while (!IsEndOfLineChar(PeekChar(withinSegment)) && (withinSegment == null || _segments.Contains(withinSegment)))
+			else
 			{
-				_text.Append(ReadChar(withinSegment));
-			}
-			ReadExact('\r', withinSegment);
-			ReadExact('\n', withinSegment);
-			return _text.ToString();
-		}
-
-		private bool EndOfFile(CodeSegment withinSegment)
-		{
-			if (withinSegment == null) return _segments.Count == 0;
-			return !_segments.Contains(withinSegment);
-		}
-
-		public static bool IsWhiteSpaceChar(char ch) => ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
-		public static bool IsCommentStart(string str) => str == "//" || str == "/*";
-		public static bool IsEndOfLineChar(char ch) => ch == '\r' || ch == '\n';
-		public static bool IsWordChar(char ch, bool firstChar) => (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_' || (firstChar && ch >= '0' && ch <= '9');
-		public static bool IsDigitChar(char ch) => ch >= '0' && ch <= '9';
-		public static bool IsAlphaChar(char ch) => (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
-
-		private void SkipWhite(CodeSegment withinSegment, bool stayOnSameLine = false)
-		{
-			while (!EndOfFile(withinSegment))
-			{
-				var ch = PeekChar(withinSegment);
-				if (IsWhiteSpaceChar(ch))
-				{
-					if (stayOnSameLine && IsEndOfLineChar(ch)) break;
-					Skip(1);
-				}
-				else if (ch == '/')
-				{
-					var str = Peek(2, withinSegment);
-					if (str == "//")
-					{
-						// Line comment
-						Skip(2);
-						if (stayOnSameLine)
-						{
-							while (!EndOfFile(withinSegment) && !IsEndOfLineChar(PeekChar(withinSegment))) Skip(1);
-						}
-						else
-						{
-							while (!EndOfFile(withinSegment) && ReadChar(withinSegment) != '\n') ;
-						}
-					}
-					else if (str == "/*")
-					{
-						// Block comment
-						SkipBlockComment(withinSegment);
-					}
-					else break;
-				}
-				else break;
-			}
-		}
-
-		private void SkipBlockComment(CodeSegment withinSegment)
-		{
-			Skip(2);	// Assumes this method is called while the position is just before '/*'
-			var depth = 1;
-			while (depth > 0 && !EndOfFile(withinSegment))
-			{
-				var ch = PeekChar(withinSegment);
-				if (ch == '/' && Peek(2, withinSegment) == "/*")
-				{
-					Skip(2);
-					depth++;
-				}
-				else if (ch == '*' && Peek(2, withinSegment) == "*/")
-				{
-					Skip(2);
-					depth--;
-				}
-				else
-				{
-					Skip(1);
-				}
-			}
-		}
-
-		public int MainPosition
-		{
-			get
-			{
-				if (_segments.Count == 0) return _mainLength;
-
-				return _segments[0].Position;
-			}
-		}
-
-		public DocPosition DocPosition
-		{
-			get
-			{
-				if (_segments.Count == 0) return new DocPosition(_doc, _mainLength);
-
-				var seg = _segments[_segments.Count - 1];
-				return new DocPosition(seg.Document, seg.Position + seg.StartingOffset);
+				return _code.Substring(_pos).Text;
 			}
 		}
 		#endregion
 
+		#region Building
+		private DocStringBuilder _build = new DocStringBuilder();
+
+		protected override void BuildClear()
+		{
+			_build.Clear();
+		}
+
+		protected override void Build(int count)
+		{
+			if (_pos + count <= _code.Length)
+			{
+				_build.Append(_code.Substring(_pos, count));
+				_pos += count;
+			}
+			else
+			{
+				_build.Append(_code.Substring(_pos, _code.Length - _pos));
+				_pos = _code.Length;
+			}
+		}
+
+		protected override string BuildToString()
+		{
+			return _build.ToString();
+		}
+
+		protected override CodeToken BuildToToken(CodeType type, bool compiled)
+		{
+			return new CodeToken(_build.ToDocString(), type, compiled);
+		}
+
+		protected override bool BuildExact(char ch)
+		{
+			if (_pos < _code.Length && _code[_pos].Char == ch)
+			{
+				_build.Clear();
+				_build.Append(_code.Substring(_pos, 1));
+				return true;
+			}
+			return false;
+		}
+
+		protected override string BuildWord()
+		{
+			_build.Clear();
+			var first = true;
+			while (_pos < _code.Length && IsWordChar(_code[_pos].Char, first))
+			{
+				_build.Append(_code[_pos++]);
+				first = false;
+			}
+			return _build.ToString();
+		}
+
+		public override bool EndOfFile => _pos >= _code.Length;
+		#endregion
+
 		#region Preprocessing
-		private IEnumerable<CodeToken> ReadPreprocessor(CodeToken directiveToken, CodeSegment directiveSegment)
+		private CodeTokenStream ReadPreprocessor(CodeToken directiveToken)
 		{
 			switch (directiveToken.Text)
 			{
 				case "#define":
-					foreach (var t in ReadDefine(directiveToken, directiveSegment)) yield return t;
-					break;
+					return ReadDefine(directiveToken);
 				case "#elif":
-					Log.Error("#elif not implemented");	// TODO
-					yield return directiveToken;
-					break;
+					Log.Error("#elif not implemented"); // TODO
+					return new CodeTokenStream(directiveToken);
 				case "#else":
 					Log.Error("#else not implemented"); // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#endif":
 					Log.Error("#endif not implemented");    // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#if":
 					Log.Error("#if not implemented");   // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#ifdef":
 					Log.Error("#ifdef not implemented");    // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#ifndef":
 					Log.Error("#ifndef not implemented");   // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#include":
-					foreach (var t in ReadInclude(directiveToken, directiveSegment)) yield return t;
-					break;
+					return ReadInclude(directiveToken);
 				case "#insert":
 					Log.Error("#insert not implemented");   // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#label":
 					Log.Error("#label not implemented");    // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#replace":
 					Log.Error("#replace not implemented");  // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#undef":
 					Log.Error("#undef not implemented");    // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#warnadd":
 					Log.Error("#warnadd not implemented");  // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				case "#warndel":
 					Log.Error("#warndel not implemented");  // TODO
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 				default:
 					Log.Warning("Unrecognized preprocessor directive '{0}'.", directiveToken.Text);
-					yield return directiveToken;
-					break;
+					return new CodeTokenStream(directiveToken);
 			}
 		}
 
-		private IEnumerable<CodeToken> ReadDefine(CodeToken directiveToken, CodeSegment directiveSegment)
+		private CodeTokenStream ReadDefine(CodeToken directiveToken)
 		{
-			if (!directiveToken.MainSpan.IsEmpty) yield return directiveToken;
-
-			SkipWhite(directiveSegment);
-
-			var nameMainPos = MainPosition;
-			var nameDocPos = DocPosition;
-			var name = ReadWord(directiveSegment);
-			if (string.IsNullOrEmpty(name))
-			{
-				Log.Warning("No name after #define at {0}", nameDocPos);
-				yield return directiveToken.ToInvalid();
-				yield break;
-			}
+			var outStream = new CodeTokenStream();
+			outStream.Add(directiveToken);
 
 			// Read the macro name
-			var nameToken = new CodeToken(
-				text: name,
-				type: CodeType.Word,
-				mainSpan: new Span(nameMainPos, MainPosition - nameMainPos),
-				position: nameDocPos,
-				compiled: false);
+			SkipWhite(stayOnSameLine: true);
+			var name = BuildWord();
+			if (string.IsNullOrEmpty(name))
+			{
+				Log.Warning("No name after #define at {0}", _build.StartPosition);
+				return outStream;
+			}
+			outStream.Add(BuildToToken(CodeType.MacroName, compiled: false));
 
 			// Read optional arguments
 			List<string> argNames = null;
-			if (PeekChar(directiveSegment) == '(')
+			SkipWhite(stayOnSameLine: true);
+			if (PeekChar() == '(')
 			{
+				Build(1);
+				outStream.Add(BuildToToken(CodeType.OpenBracket, compiled: false));
+
 				// This is a macro with parameters
 				argNames = new List<string>();
-				while (!EndOfFile(directiveSegment))
+				while (!EndOfFile)
 				{
-					SkipWhite(directiveSegment);
-					if (ReadExact(')', directiveSegment)) break;
-					if (ReadExact(',', directiveSegment)) continue;
+					SkipWhite(stayOnSameLine: true);
+					if (BuildExact(')'))
+					{
+						outStream.Add(BuildToToken(CodeType.CloseBracket, compiled: false));
+						break;
+					}
+					if (BuildExact(','))
+					{
+						outStream.Add(BuildToToken(CodeType.Comma, compiled: false));
+						continue;
+					}
 
-					var argName = ReadWord(directiveSegment);
-					if (!string.IsNullOrEmpty(argName)) argNames.Add(argName);
+					var argName = BuildWord();
+					if (!string.IsNullOrEmpty(argName))
+					{
+						argNames.Add(argName);
+						outStream.Add(BuildToToken(CodeType.Argument, compiled: false));
+					}
 					else break;
 				}
 			}
 
-			var bodyTokens = new List<CodeToken>(); // Tokens to be displayed to the user
-			var defTokens = new List<CodeToken>();  // Tokens that will be included in the macro
-			SkipWhite(directiveSegment, stayOnSameLine: true);
-			if (PeekExact('{', directiveSegment))
+			// Read macro body
+			var bodyTokens = new CodeTokenStream();
+			SkipWhite(stayOnSameLine: true);
+			if (BuildExact('{'))
 			{
 				// The body is enclosed in { }
+				outStream.Add(BuildToToken(CodeType.OpenBrace, compiled: false));
 
-				var bodyStartMainPos = MainPosition;
-				var bodyStartDocPos = DocPosition;
-				Skip(1);
-				bodyTokens.Add(new CodeToken(
-					text: "{",
-					type: CodeType.OpenBrace,
-					mainSpan: new Span(bodyStartMainPos, MainPosition - bodyStartMainPos),
-					position: bodyStartDocPos,
-					compiled: false));
-
-				while (!EndOfFile(directiveSegment))
+				SkipWhite();
+				while (!EndOfFile)
 				{
-					SkipWhite(directiveSegment);
-					if (PeekExact('}', directiveSegment))
+					if (BuildExact('}'))
 					{
-						var bodyEndMainPos = MainPosition;
-						var bodyEndDocPos = DocPosition;
-						Skip(1);
-						bodyTokens.Add(new CodeToken(
-							text: "}",
-							type: CodeType.CloseBrace,
-							mainSpan: new Span(bodyEndMainPos, MainPosition - bodyEndMainPos),
-							position: bodyEndDocPos,
-							compiled: false));
+						outStream.Add(BuildToToken(CodeType.CloseBrace, compiled: false));
 						break;
 					}
 
-					foreach (var tok in ReadSimpleNestable(directiveSegment, CodeType.CloseBrace))
+					foreach (var token in ReadSimpleNestable(CodeType.CloseBrace))
 					{
-						if (argNames != null && tok.Type == CodeType.Word && argNames.Contains(tok.Text))
+						if (argNames != null && token.Type == CodeType.Word && argNames.Contains(token.Text))
 						{
-							var argToken = new CodeToken(
-								text: tok.Text,
-								type: CodeType.PreprocessorArgument,
-								mainSpan: tok.MainSpan,
-								position: tok.Position,
-								compiled: false);
+							var argToken = token.ToType(CodeType.Argument);
+							outStream.Add(argToken);
 							bodyTokens.Add(argToken);
-							defTokens.Add(argToken);
 						}
 						else
 						{
-							bodyTokens.Add(tok.ToNotCompiled());
-							defTokens.Add(tok);
+							outStream.Add(token);
+							bodyTokens.Add(token);
 						}
 					}
+
+					SkipWhite();
 				}
 			}
 			else
 			{
-				// Single line optionally extended with trailing \
-				SkipWhite(directiveSegment, stayOnSameLine: true);
-				while (!EndOfFile(directiveSegment))
+				SkipWhite(stayOnSameLine: true);
+				while (!EndOfFile)
 				{
-					var lineMainPos = MainPosition;
-					var lineDocPos = DocPosition;
-					var line = ReadRawTextToEndOfLine(directiveSegment);
-					var more = false;
-					if (line.EndsWith("\\"))
-					{
-						line = line.Substring(0, line.Length - 1);
-						more = true;
-					}
+					var eol = SkipExact('\r');
+					var eol2 = SkipExact('\n');
+					if (eol || eol2) break;
 
-					var rdr = new SimpleCodeReader(line, lineMainPos, lineDocPos);
-					foreach (var tok in rdr.ReadAll())
+					if (BuildExact('\\'))
 					{
-						if (argNames != null && tok.Type == CodeType.Word && argNames.Contains(tok.Text))
+						if (IsEndOfLineChar(PeekChar()))
 						{
-							var argToken = new CodeToken(
-								text: tok.Text,
-								type: CodeType.PreprocessorArgument,
-								mainSpan: tok.MainSpan,
-								position: tok.Position,
-								compiled: false);
-							bodyTokens.Add(argToken);
-							defTokens.Add(argToken);
+							outStream.Add(BuildToToken(CodeType.LineContinue, compiled: false));
+							SkipExact('\r');
+							SkipExact('\n');
 						}
 						else
 						{
-							bodyTokens.Add(tok.ToNotCompiled());
-							defTokens.Add(tok);
+							outStream.Add(BuildToToken(CodeType.Invalid, compiled: true));
+						}
+						continue;
+					}
+
+					var token = ReadSimple(stayOnSameLine: true);
+					if (token.HasValue)
+					{
+						if (argNames != null && token.Value.Type == CodeType.Word && argNames.Contains(token.Value.Text))
+						{
+							var argToken = token.Value.ToType(CodeType.Argument);
+							outStream.Add(argToken);
+							bodyTokens.Add(argToken);
+						}
+						else
+						{
+							outStream.Add(token.Value);
+							bodyTokens.Add(token.Value);
 						}
 					}
 
-					if (!more) break;
+					SkipWhite(stayOnSameLine: true);
 				}
 			}
 
-			AddMacro(new Macro(
-				name: name,
-				arguments: argNames != null ? argNames.ToArray() : null,
-				bodyTokens: defTokens.Count != 0 ? defTokens.ToArray() : null));
-
-			yield return nameToken;
-			foreach (var t in bodyTokens) yield return t;
+			_macros.Add(new Macro(name, argNames != null ? argNames.ToArray() : null, bodyTokens));
+			return outStream;
 		}
 
-		private IEnumerable<CodeToken> ReadInclude(CodeToken directiveToken, CodeSegment directiveSegment)
+		private CodeTokenStream ReadMacroUsage(CodeToken nameToken, Macro macro)
 		{
-			yield return directiveToken;
+			var outStream = new CodeTokenStream();
+			outStream.Add(nameToken.ToNotCompiled().ToType(CodeType.MacroName));
+			if (!macro.HasBody) return outStream;
+
+			if (macro.HasArguments)
+			{
+				SkipWhite();
+				if (PeekChar() != '(')
+				{
+					Log.Warning("Use of macro '{0}' requires arguments but none found.", nameToken.Text);
+				}
+				else
+				{
+					Build(1);
+					outStream.Add(BuildToToken(CodeType.OpenBracket, compiled: false));
+
+					var args = new List<CodeTokenStream>();
+					var curArg = new CodeTokenStream();
+					SkipWhite();
+					while (!EndOfFile)
+					{
+						if (PeekChar() == ')')
+						{
+							Build(1);
+							outStream.Add(BuildToToken(CodeType.CloseBracket, compiled: false));
+							break;
+						}
+						if (PeekChar() == ',')
+						{
+							Build(1);
+							outStream.Add(BuildToToken(CodeType.Comma, compiled: false));
+							SkipWhite();
+							continue;
+						}
+
+						foreach (var token in ReadSimpleNestable(CodeType.CloseBracket))
+						{
+							outStream.Add(token.ToNotCompiled());
+							curArg.Add(token);
+						}
+
+						SkipWhite();
+					}
+
+					var argNames = macro.Arguments;
+					if (args.Count != argNames.Length)
+					{
+						Log.Warning("Macro '{0}' requires {1} arguments, but counted {2}.", macro.Name, argNames.Length, args.Count);
+					}
+					else
+					{
+						var subMacros = _macros.AddScope();
+						for (int a = 0, aa = args.Count; a < aa; a++)
+						{
+							subMacros.Add(new Macro(argNames[a], null, args[a]));
+						}
+
+						foreach (var token in ResolveTokens(macro.Body, subMacros))
+						{
+							outStream.Add(token.ToMainSpan(Span.FromPosition(MainPosition)));
+						}
+					}
+				}
+			}
+			else // No arguments
+			{
+				foreach (var token in ResolveTokens(macro.Body, _macros))
+				{
+					outStream.Add(token.ToMainSpan(Span.FromPosition(MainPosition)));
+				}
+			}
+
+			return outStream;
+		}
+
+		private CodeTokenStream ResolveTokens(CodeTokenStream inStream, MacroStore macros)
+		{
+			var outStream = new CodeTokenStream();
+
+			while (true)
+			{
+				var gotMacro = false;
+
+				while (!inStream.EndOfStream)
+				{
+					var token = inStream.Read();
+					if (token.Type == CodeType.Word && macros.TryGetMacro(token.Text, out var macro))
+					{
+						gotMacro = true;
+						if (macro.HasBody)
+						{
+							if (macro.HasArguments)
+							{
+								if (inStream.EndOfStream || inStream.Peek().Type != CodeType.OpenBracket)
+								{
+									outStream.Add(token);
+								}
+								else
+								{
+									var savePos = inStream.Position;
+									var openArgsToken = inStream.Read();
+									var args = new List<CodeTokenStream>();
+									var curArg = new CodeTokenStream();
+									var stack = new Stack<CodeType>();
+									while (!inStream.EndOfStream)
+									{
+										var tok = inStream.Read();
+										if (stack.Count > 0 && stack.Peek() == tok.Type)
+										{
+											stack.Pop();
+										}
+										else if (tok.Type == CodeType.CloseBracket)
+										{
+											break;
+										}
+										else if (tok.Type == CodeType.Comma)
+										{
+											args.Add(curArg);
+											curArg = new CodeTokenStream();
+										}
+										else if (tok.Type == CodeType.OpenArray || tok.Type == CodeType.OpenBrace || tok.Type == CodeType.OpenBracket)
+										{
+											stack.Push(tok.Type.GetClosingType());
+										}
+										else
+										{
+											curArg.Add(tok);
+										}
+									}
+									args.Add(curArg);
+
+									var argNames = macro.Arguments;
+									if (args.Count != argNames.Length)
+									{
+										inStream.Position = savePos;
+									}
+									else
+									{
+										var subMacros = macros.AddScope();
+										for (int a = 0, aa = args.Count; a < aa; a++) subMacros.Add(new Macro(argNames[a], null, args[a]));
+										outStream.Add(ResolveTokens(macro.Body, subMacros));
+									}
+								}
+							}
+							else
+							{
+								outStream.Add(ResolveTokens(macro.Body, macros));
+							}
+						}
+					}
+					else
+					{
+						outStream.Add(token);
+					}
+				}
+
+				if (gotMacro)
+				{
+					// Run it through the resolver another time until no more macros are found
+					inStream = outStream;
+					inStream.Position = 0;
+					outStream = new CodeTokenStream();
+				}
+				else break;
+			}
+
+			return outStream;
+		}
+
+		private CodeTokenStream ReadInclude(CodeToken directiveToken)
+		{
+			var outStream = new CodeTokenStream();
+			outStream.Add(directiveToken);
 
 			var fileNameSB = new StringBuilder();
+			BuildClear();
 
-			SkipWhite(directiveSegment, stayOnSameLine: true);
-			var startCh = PeekChar(directiveSegment);
+			SkipWhite(stayOnSameLine: true);
+			var startCh = PeekChar();
 			if (startCh == '<' || startCh == '\"')
 			{
 				var endCh = startCh == '<' ? '>' : '\"';
 				var includeSystemPaths = startCh == '<';
-				var startMainPos = MainPosition;
-				var startDocPos = DocPosition;
-				Skip(1);
+				Build(1);
 
-				while (!EndOfFile(directiveSegment))
+				while (!EndOfFile)
 				{
-					var ch = ReadChar(directiveSegment);
-					if (ch == endCh) break;
+					var ch = PeekChar();
+					if (ch == endCh)
+					{
+						Build(1);
+						break;
+					}
 					fileNameSB.Append(ch);
 				}
 
-				var endMainPos = MainPosition;
-				yield return new CodeToken(
-					text: string.Concat(startCh, fileNameSB, endCh),
-					type: CodeType.StringLiteral,
-					mainSpan: new Span(startMainPos, endMainPos - startMainPos),
-					position: startDocPos,
-					compiled: false);
+				outStream.Add(BuildToToken(CodeType.StringLiteral, compiled: false));
 
-				var includeDoc = _profile.TryGetIncludeFile(fileNameSB.ToString(), directiveSegment.Document, includeSystemPaths);
+				var includeDoc = _profile.TryGetIncludeFile(fileNameSB.ToString(), directiveToken.Position.Document, includeSystemPaths);
 				if (includeDoc != null)
 				{
-					_segments.Add(new CodeSegment(
-						document: includeDoc,
-						startingOffset: 0,
-						code: includeDoc.Text,
-						position: 0,
-						returnOffset: CurrentSegment?.Position ?? 0));
+					_code.InsertDoc(_pos, includeDoc.Text, includeDoc);
 				}
 				else
 				{
-					Log.Warning("Include file {2}{0}{3} not found from document '{1}'", fileNameSB, directiveSegment.Document, startCh, endCh);
+					Log.Warning("Include file {2}{0}{3} not found from document '{1}'", fileNameSB, directiveToken.Position.Document, startCh, endCh);
 				}
 			}
-			else
-			{
-				yield return directiveToken;
-			}
-		}
-		#endregion
 
-		#region CodeSegment
-		internal class CodeSegment
-		{
-			/// <summary>
-			/// Document in which this code lives.
-			/// </summary>
-			public Document Document { get; set; }
-
-			/// <summary>
-			/// Starting position of the code segment to be read.
-			/// </summary>
-			public int StartingOffset { get; set; }
-
-			/// <summary>
-			/// The chunk of code to be read.
-			/// </summary>
-			public string Code { get; set; }
-
-			/// <summary>
-			/// The current position in the segment.
-			/// </summary>
-			public int Position { get; set; }
-
-			/// <summary>
-			/// Location in the parent excerpt to return to when reading this code is done.
-			/// </summary>
-			public int ReturnOffset { get; set; }
-
-			public CodeSegment(Document document, int startingOffset, string code, int position, int returnOffset)
-			{
-				Document = document ?? throw new ArgumentNullException(nameof(document));
-				Code = code ?? throw new ArgumentNullException(nameof(code));
-
-				if (startingOffset < 0 || startingOffset >= code.Length) throw new ArgumentOutOfRangeException(nameof(startingOffset));
-				StartingOffset = startingOffset;
-
-				if (position < 0 || position >= code.Length) throw new ArgumentOutOfRangeException(nameof(position));
-				Position = position;
-
-				ReturnOffset = returnOffset;
-			}
-
-			public CodeSegment Clone()
-			{
-				return new CodeSegment(Document, StartingOffset, Code, Position, ReturnOffset);
-			}
-		}
-
-		private CodeSegment CurrentSegment => _segments.Count == 0 ? null : _segments[_segments.Count - 1];
-		#endregion
-
-		#region Snapshots
-		/// <summary>
-		/// Takes a snapshot of the reader that can be restored if the previous position/state is needed.
-		/// </summary>
-		/// <returns>The snapshot object.</returns>
-		public Snapshot TakeSnapshot()
-		{
-			return new Snapshot(this);
-		}
-
-		public class Snapshot
-		{
-			private PreprocessingCodeReader _reader;
-			private List<CodeSegment> _segments;
-			private bool _lastTokenSupportsNegative;
-
-			internal Snapshot(PreprocessingCodeReader reader)
-			{
-				_segments = new List<CodeSegment>();
-				_reader = reader ?? throw new ArgumentNullException(nameof(reader));
-				foreach (var seg in _reader._segments)
-				{
-					_segments.Add(seg.Clone());
-				}
-
-				_lastTokenSupportsNegative = _reader._lastTokenSupportsNegative;
-			}
-
-			public void Restore()
-			{
-				_reader._segments.Clear();
-				foreach (var seg in _segments)
-				{
-					_reader._segments.Add(seg.Clone());
-				}
-
-				_reader._lastTokenSupportsNegative = _lastTokenSupportsNegative;
-			}
-		}
-		#endregion
-
-		#region Macros
-		private Dictionary<string, Macro> _macros = new Dictionary<string, Macro>();
-
-		public void AddMacro(Macro macro)
-		{
-			_macros[macro.Name] = macro;
-		}
-
-		public class Macro
-		{
-			public string Name { get; private set; }
-			public string[] Arguments { get; private set; }
-			public CodeToken[] BodyTokens { get; private set; }
-
-			/// <summary>
-			/// Creates a macro definition
-			/// </summary>
-			/// <param name="name">Name of the macro</param>
-			/// <param name="arguments">Optional arguments. Pass null if no arguments present.</param>
-			/// <param name="bodyTokens">Optional body tokens. Pass null if no body tokens present.</param>
-			public Macro(string name, string[] arguments, CodeToken[] bodyTokens)
-			{
-				if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
-				Name = name;
-
-				Arguments = arguments;
-				if (Arguments != null && Arguments.Length == 0) Arguments = null;
-
-				BodyTokens = bodyTokens;
-				if (BodyTokens != null && BodyTokens.Length == 0) BodyTokens = null;
-			}
+			return outStream;
 		}
 		#endregion
 	}

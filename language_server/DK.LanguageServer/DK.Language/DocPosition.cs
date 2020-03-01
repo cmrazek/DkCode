@@ -23,5 +23,15 @@ namespace DK.Language
 		public int Position => _pos;
 
 		public override string ToString() => $"[Doc:{_doc.Uri} Offset:{_pos}]";
+
+		public static DocPosition operator +(DocPosition docPos, int offset)
+		{
+			return new DocPosition(docPos._doc, docPos._pos + offset);
+		}
+
+		public static DocPosition operator -(DocPosition docPos, int offset)
+		{
+			return new DocPosition(docPos._doc, docPos._pos + offset);
+		}
 	}
 }

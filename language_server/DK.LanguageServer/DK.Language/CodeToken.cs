@@ -23,6 +23,15 @@ namespace DK.Language
 			Compiled = compiled;
 		}
 
+		internal CodeToken(DocString text, CodeType type, bool compiled)
+		{
+			Text = text.Text;
+			MainSpan = text.MainSpan;
+			Position = text.DocPosition;
+			Type = type;
+			Compiled = compiled;
+		}
+
 		public CodeToken ToInvalid()
 		{
 			return new CodeToken(Text, CodeType.Invalid, MainSpan, Position, Compiled);
@@ -31,6 +40,16 @@ namespace DK.Language
 		public CodeToken ToNotCompiled()
 		{
 			return new CodeToken(Text, Type, MainSpan, Position, compiled: false);
+		}
+
+		public CodeToken ToType(CodeType type)
+		{
+			return new CodeToken(Text, type, MainSpan, Position, Compiled);
+		}
+
+		public CodeToken ToMainSpan(Span span)
+		{
+			return new CodeToken(Text, Type, span, Position, Compiled);
 		}
 
 		public override string ToString()
